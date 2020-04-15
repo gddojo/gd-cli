@@ -1,0 +1,228 @@
+#!/bin/bash
+set -e
+
+CHANNEL="${GODOT_CHANNEL}"
+VERSION="${GODOT_VERSION}"
+INSTALL_DIR="${GODOT_PATH}"
+POSITIONAL=()
+
+SCRIPT=`basename "$0"`
+
+# Set the default channel to stable
+if [ -z "$CHANNEL" ]; then
+
+CHANNEL="stable"
+
+fi
+
+while [[ $# -gt 0 ]]
+do
+key="$1"
+
+case $key in
+    -h|--help)
+    HELP=YES
+    shift # past argument
+    ;;
+    -e|--export)
+    EXPORT=YES
+    shift # past argument
+    ;;
+    -v|--version)
+    VERSION="$2"
+    shift # past argument
+    shift # past value
+    ;;
+    -c|--channel)
+    CHANNEL="$2"
+    shift # past argument
+    shift # past value
+    ;;
+    -p|--path)
+    INSTALL_DIR="$2"
+    shift # past argument
+    shift # past value
+    ;;
+    install)
+    COMMAND=INSTALL
+    shift # past argument
+    ;;
+    run)
+    COMMAND=RUN
+    shift # past argument
+    ;;
+    --)
+    shift
+    break
+    ;;
+    *)    # unknown option
+    POSITIONAL+=("$1") # save it in an array for later
+    shift # past argument
+    ;;
+esac
+done
+set -- "${POSITIONAL[@]} $@" # restore positional parameters
+
+common_flags() {
+cat << EOF
+
+Flags:
+    --channel | -c <channel>    Channel to run, default: \$GODOT_CHANNEL or stable
+    --version | -v <version>    Version to run, default: \$GODOT_VERSION
+    --path    | -p <path>       Path to installation, default: \$GODOT_PATH or /bin/godot/
+EOF
+}
+
+help_run() {
+
+cat << EOF
+
+Usage: $SCRIPT [--channel|-c <channel>] [--version|-v <version>] [--path|-p <path>] run -- <arguments>
+EOF
+common_flags
+cat << EOF
+    <arguments>                 Additional arguments to send to godot
+EOF
+
+}
+
+help_install() {
+
+cat << EOF
+
+Usage: $SCRIPT [--channel|-c <channel>] [--version|-v <version>] [--path|-p <path>] [--export|-e] install
+EOF
+common_flags
+cat << EOF
+    --export  | -e              Installs export templates
+EOF
+
+}
+
+help() {
+
+cat << EOF
+
+Usage: $SCRIPT [--help|-h] <command>
+
+Flags:
+    --help | -h    Show help (this prompt)
+
+Commands:
+
+EOF
+
+echo "install:"
+help_install
+echo
+echo "run:"
+help_run
+
+}
+
+# Set the path for installation
+if [ -z "$INSTALL_DIR" ]; then
+
+INSTALL_DIR="/bin/godot/${VERSION}"
+
+else
+
+INSTALL_DIR="${INSTALL_DIR}/${VERSION}"
+
+fi
+
+GODOT_CMD="${INSTALL_DIR}/${CHANNEL}"
+
+# Run "INSTALL" command
+if [ "$COMMAND" = "INSTALL" ]; then
+
+RC=0
+
+# Check if version was specified
+if [[ -z "$VERSION" && "$HELP" != "YES" ]]; then
+
+echo "Version must be set"
+RC=1
+
+fi
+
+# Only show the help prompt
+if [[ "$HELP" = "YES" || $RC != 0 ]]; then
+
+help_install
+exit $RC
+
+fi
+
+# Create the directory for installation
+mkdir -p "$INSTALL_DIR"
+
+NAME="Godot_v${VERSION}-${CHANNEL}_linux_headless.64"
+
+# Install godot linux headless
+curl -o "${NAME}.zip" "https://downloads.tuxfamily.org/godotengine/${VERSION}/${CHANNEL}/${NAME}.zip" && \
+    unzip "${NAME}.zip" && \
+    mv "${NAME}" "${GODOT_CMD}" && \
+    rm "${NAME}.zip"
+
+# Install export templates
+if [ "$EXPORT" = "YES" ]; then
+
+# The path for export templates
+EXPORT_ROOT="${HOME}/.local/share/godot/templates/"
+
+# Create the directory for templates
+mkdir -p "${EXPORT_ROOT}"
+
+# Download and install export templates
+curl -o "templates.zip" "https://downloads.tuxfamily.org/godotengine/${VERSION}/${CHANNEL}/Godot_v${VERSION}-${CHANNEL}_export_templates.tpz" && \
+    unzip "templates.zip" && \
+    mv "templates" "${EXPORT_ROOT}/${VERSION}.${CHANNEL}" && \
+    rm "templates.zip"
+
+fi
+
+exit 0
+
+fi
+
+# Run "RUN" command
+if [ "$COMMAND" = "RUN" ]; then
+
+RC=0
+
+# Check if version was specified
+if [[ -z "$VERSION" && "$HELP" != "YES" ]]; then
+
+echo "Version must be set"
+RC=1
+
+fi
+
+# Only show the help prompt
+if [[ "$HELP" = "YES" || $RC != 0 ]]; then
+
+help_run
+exit $RC
+
+fi
+
+# Run godot
+echo "${GODOT_CMD} $@"
+$GODOT_CMD $@
+
+exit $?
+
+fi
+
+# Show help if requested
+if [ "$HELP" = "YES" ]; then
+
+help
+
+exit 0
+
+fi
+
+# Run no commands
+exit 1
